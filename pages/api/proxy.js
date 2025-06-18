@@ -8,16 +8,8 @@ export default async function handler(req, res) {
 
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Cache-Control', 'no-store');
-
-    stream.on('error', (err) => {
-      console.error('Stream error:', err);
-      res.status(500).send('Stream proxy error');
-    });
-
-    stream.pipe(res);
-  } catch (err) {
-    console.error('Proxy error:', err);
-    res.status(500).send('Proxy handler error');
-  }
+    export default async function handler(req, res) {
+  console.log('Proxy function started!');
+  res.status(200).send('Proxy function is alive! (No audio yet)');
+  console.log('Proxy function finished!');
 }

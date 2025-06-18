@@ -1,77 +1,87 @@
-import got from 'got';
+// No 'got' import needed anymore
+import http from 'http';
+import https from 'https'; // Use https for secure connections if target was HTTPS
 
 export default async function handler(req, res) {
   const streamUrl = 'http://167.71.103.22:8000/stream.mp3';
+  const parsedUrl = new URL(streamUrl); // Parse the URL to get host, port, path
 
-  try {
-    // Use got.get() which returns a promise for the response
-    // The response.body property will be a stream.
-    const response = await got.get(streamUrl, {
-      timeout: {
-        request: 10000 // Timeout for the entire request (10 seconds)
-      }
-    });
-
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Cache-Control', 'no-store');
-
-    // Check if response.body exists and has a pipe method
-    if (response.body && typeof response.body.pipe === 'function') {
-      response.body.pipe(res);
-
-      response.body.on('error', (err) => {
-        console.error('Inner stream error from got response:', err);
-        res.status(500).send('Stream proxy error during piping');
-      });
-
-      res.on('finish', () => {
-        console.log('Stream successfully sent to client.');
-      });
-
-   import got from 'got';
-
-export default async function handler(req, res) {
-  const streamUrl = 'http://167.71.103.22:8000/stream.mp3';
+  // Determine which module to use based on protocol
+  const client = parsedUrl.protocol === 'https:' ? https : http;
 
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'audio/mpeg');
-  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Cache-Control', 'no-store'); // Important for streams
 
   try {
-    const remoteStream = got.stream(streamUrl);
+    const proxyRequest = client.request({
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80), // Default ports
+      path: parsedUrl.pathname + parsedUrl.search, // Include query params
+      method: 'GET',
+      headers: {
+        'User-Agent': req.headers['user-agent'] || 'Vercel-Proxy-Stream',
+        // Forward other relevant headers if needed, e.g., 'Range', 'Accept'
+      },
+    }, (proxyResponse) => {
+      // Set response headers from the proxyResponse, especially Content-Type
+      // It's good to copy all relevant headers to preserve the original stream's properties
+      for (const header in proxyResponse.headers) {
+        // Avoid issues with content-length for streaming, and potential transfer-encoding
+        if (header.toLowerCase() !== 'content-length' && header.toLowerCase() !== 'transfer-encoding') {
+          res.setHeader(header, proxyResponse.headers[header]);
+        }
+      }
 
-    // Handle errors on the remote stream
-    remoteStream.on('error', (err) => {
-      console.error('Remote stream error (from got):', err.message);
-      if (!res.headersSent) { // Only send error if headers haven't been sent yet
-        res.status(500).send('Stream proxy error from source');
+      // Ensure Content-Type is audio/mpeg if it wasn't set or was wrong
+      if (!res.getHeader('Content-Type')) {
+        res.setHeader('Content-Type', 'audio/mpeg');
+      }
+
+      // Pipe the proxy response stream to the Vercel response
+      proxyResponse.pipe(res);
+
+      proxyResponse.on('error', (err) => {
+        console.error('Proxy response stream error:', err.message);
+        if (!res.headersSent) {
+          res.status(500).send('Proxy response stream error');
+        } else {
+          res.end();
+        }
+      });
+
+      proxyResponse.on('end', () => {
+        console.log('Proxy response stream ended successfully.');
+      });
+    });
+
+    // Handle errors on the proxy request itself (e.g., network issues)
+    proxyRequest.on('error', (err) => {
+      console.error('Proxy request error:', err.message);
+      if (!res.headersSent) {
+        res.status(500).send('Proxy request connection error');
       } else {
-        res.end(); // If headers sent, just end the response
+        res.end();
       }
     });
 
-    // Pipe the remote stream directly to the response
-    remoteStream.pipe(res);
+    // End the request, initiating the connection
+    proxyRequest.end();
 
-    // Handle client disconnection (optional, but good practice for long streams)
+    // Handle client disconnection
     req.on('close', () => {
-      console.log('Client disconnected. Destroying remote stream.');
-      remoteStream.destroy(); // Stop receiving data from the source
+      console.log('Client disconnected. Aborting proxy request.');
+      proxyRequest.abort(); // Abort the request to the source
     });
 
-    // Log when the piping is finished or client closes
-    res.on('finish', () => {
-      console.log('Response stream finished.');
-    });
-    res.on('close', () => {
-      console.log('Response stream closed.');
+    req.on('error', (err) => {
+      console.error('Client request error:', err.message);
     });
 
   } catch (err) {
-    console.error('Proxy handler error (outer catch):', err.message);
+    console.error('Outer proxy handler error:', err.message);
     if (!res.headersSent) {
-      res.status(500).send('Proxy handler setup error');
+      res.status(500).send('Outer proxy handler setup error');
     } else {
       res.end();
     }

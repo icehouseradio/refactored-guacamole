@@ -2,8 +2,8 @@
   "name": "refactored-guacamole",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js", 
-  "type": "module",
+  "main": "index.js",
+  "type": "commonjs",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -14,12 +14,8 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/icehouseradio/refactored-guacamole/issues"
   },
-  "homepage": "https://github.com/icehouseradio/refactored-guacamole#readme",
-  "dependencies": {
-    "got": "^14.4.7"
-  }
+  "homepage": "https://github.com/icehouseradio/refactored-guacamole#readme"
 }
